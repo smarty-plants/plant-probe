@@ -1,5 +1,8 @@
+#ifndef COMMAND_HPP
+#define COMMAND_HPP
+
 #include <Arduino.h>
-#include "Result.hpp"
+#include <Result.hpp>
 
 typedef Result<bool, const char*> CommandResult;
 typedef CommandResult (*CommandHandler)(int argc, char** argv);
@@ -90,9 +93,11 @@ public:
                     return command.ExecuteCommand(argc - 1, &argv[1]);
             }
 
-            return CommandResult("Command not found");
+            return ERR("Unknown command");
         }
 
-        return CommandResult("Nothing supplied");
+        return ERR("Nothing supplied");
     }
 };
+
+#endif

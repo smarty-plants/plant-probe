@@ -1,9 +1,11 @@
 #include <Arduino.h>
-#include "Command.hpp"
+#include <Command.hpp>
+#include <WiFiManager.hpp>
 
 #define COMMAND_BUFFER_SIZE 128
 
 CommandExecutor<5> commandExecutor;
+WiFiManager wifiManager;
 
 char commandBuffer[COMMAND_BUFFER_SIZE];
 int commandBufferIndex = 0;
@@ -16,25 +18,38 @@ void setup()
     while (!Serial) { }
 
     Serial.println("Starting!");
+
+    if (!wifiManager.UseStoredCredentials())
+        Serial.println("No stored WiFi credentials");
     
-    Command testCommand("test", 0, [](int argc, char** argv) {
-        Serial.println("Hello");
-        return ERR("Test error");
-    });
-
-    Command testCommand2("test2", 0, [](int argc, char** argv) {
-        Serial.println("Hello 2");
+    Command wifiSetCommand("wifi-set", 2, [](int argc, char** argv) {
+        wifiManager.SetCredentials(argv[0], argv[1]);
+        wifiManager.StoreCredentials();
+        Serial.println("Credentials updated");
         return OK;
     });
 
-    Command testCommand3("test3", 0, [](int argc, char** argv) {
-        Serial.println("Hello 3");
+    Command wifiConnectCommand("wifi-connect", 0, [](int argc, char** argv) {
+        if (!wifiManager.Connect())
+            return ERR("No credentials set. Use wifi-set <SSID> <password> to set credentials.");
         return OK;
     });
 
-    commandExecutor.AddCommand(std::move(testCommand));
-    commandExecutor.AddCommand(std::move(testCommand2));
-    commandExecutor.AddCommand(std::move(testCommand3));
+    Command wifiDisconnectCommand("wifi-disconnect", 0, [](int argc, char** argv) {
+        wifiManager.Disconnect();
+        return OK;
+    });
+
+    Command wifiClearCommand("wifi-clear", 0, [](int argc, char** argv) {
+        wifiManager.ClearStoredCredentials();
+        Serial.println("Cleared stored credentials");
+        return OK;
+    });
+
+    commandExecutor.AddCommand(std::move(wifiSetCommand));
+    commandExecutor.AddCommand(std::move(wifiConnectCommand));
+    commandExecutor.AddCommand(std::move(wifiDisconnectCommand));
+    commandExecutor.AddCommand(std::move(wifiClearCommand));
 }
 
 void HandleCommands()
@@ -71,6 +86,7 @@ void HandleCommands()
 void loop()
 {
     HandleCommands();
+    wifiManager.Update();
 
     digitalWrite(LED_BUILTIN, millis() % 1000 < 500);
 }

@@ -1,3 +1,6 @@
+#ifndef RESULT_HPP
+#define RESULT_HPP
+
 #include <stdlib.h>
 
 template <typename T, typename E>
@@ -19,3 +22,5 @@ private:
     std::optional<T> resultValue;
     std::optional<E> resultError;
 };
+
+#endif
