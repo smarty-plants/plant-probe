@@ -2,22 +2,31 @@
 #include <Command.hpp>
 #include <WiFiManager.hpp>
 
+#include <Pins.h>
+
+#include <SensorReader.hpp>
+
 #define COMMAND_BUFFER_SIZE 128
 
-CommandExecutor<5> commandExecutor;
+CommandExecutor<10> commandExecutor;
 WiFiManager wifiManager;
 
 char commandBuffer[COMMAND_BUFFER_SIZE];
 int commandBufferIndex = 0;
 
+SensorReader sensors(PIN_DHT, PIN_SDA, PIN_SCL);
+
 void setup()
 {
     pinMode(LED_BUILTIN, OUTPUT);
+
 
     Serial.begin(9600);
     while (!Serial) { }
 
     Serial.println("Starting!");
+
+    sensors.Begin();
 
     if (!wifiManager.UseStoredCredentials())
         Serial.println("No stored WiFi credentials");
@@ -46,10 +55,48 @@ void setup()
         return OK;
     });
 
+    Command pollTemperatureCommand("get-temperature", 0, [](int argc, char** argv) {
+        if (!sensors.IsDHTReady())
+            return ERR("No read from DHT yet");
+
+        Serial.printf("Temperature: %f oC\n", sensors.GetTemperature());
+        return OK;
+    });
+
+    Command pollHumidityCommand("get-humidity", 0, [](int argc, char** argv) {
+        if (!sensors.IsDHTReady())
+            return ERR("No read from DHT yet");
+
+        Serial.printf("Humidity: %f%%\n", sensors.GetHumidity());
+        return OK;
+    });
+
+    Command pollSoilMoistureCommand("get-soil-moisture", 0, [](int argc, char** argv) {
+        if (!sensors.IsSoilLightReady())
+            return ERR("No read from soil/light yet");
+
+        Serial.printf("Soil moisture: %f%%\n", sensors.GetSoilMoisture());
+        return OK;
+    });
+
+    Command pollLightLevelCommand("get-light-level", 0, [](int argc, char** argv) {
+        if (!sensors.IsSoilLightReady())
+            return ERR("No read from soil/light yet");
+
+        Serial.printf("Light level: %f%%\n", sensors.GetLightLevel());
+        return OK;
+    });
+
+
     commandExecutor.AddCommand(std::move(wifiSetCommand));
     commandExecutor.AddCommand(std::move(wifiConnectCommand));
     commandExecutor.AddCommand(std::move(wifiDisconnectCommand));
     commandExecutor.AddCommand(std::move(wifiClearCommand));
+
+    commandExecutor.AddCommand(std::move(pollTemperatureCommand));
+    commandExecutor.AddCommand(std::move(pollHumidityCommand));
+    commandExecutor.AddCommand(std::move(pollSoilMoistureCommand));
+    commandExecutor.AddCommand(std::move(pollLightLevelCommand));
 }
 
 void HandleCommands()
@@ -86,7 +133,9 @@ void HandleCommands()
 void loop()
 {
     HandleCommands();
+
     wifiManager.Update();
+    sensors.Update();
 
     digitalWrite(LED_BUILTIN, millis() % 1000 < 500);
 }

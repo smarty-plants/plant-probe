@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <Result.hpp>
 
+#define MAX_COMMAND_LENGTH 32
+
 typedef Result<bool, const char*> CommandResult;
 typedef CommandResult (*CommandHandler)(int argc, char** argv);
 
@@ -14,7 +16,7 @@ char errorBuf[128];
 
 class Command {
 private:
-    char name[16];
+    char name[MAX_COMMAND_LENGTH];
     unsigned int argCount;
     CommandHandler handler;
 
@@ -23,7 +25,7 @@ public:
 
     Command(const char* name, unsigned int argCount, CommandHandler handler) 
     {
-        strncpy(this->name, name, 16);
+        strncpy(this->name, name, MAX_COMMAND_LENGTH);
         this->argCount = argCount;
         this->handler = handler;
     }
