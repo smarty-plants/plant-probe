@@ -1,25 +1,31 @@
 #include <Arduino.h>
 #include <Command.hpp>
 #include <WiFiManager.hpp>
+#include <iostream>
+#include <string>
 
 #include <Pins.h>
 
 #include <SensorReader.hpp>
+#include <Sender.hpp>
 
 #define COMMAND_BUFFER_SIZE 128
+#define UPDATEINTERVAL 2000
 
-CommandExecutor<10> commandExecutor;
+
+CommandExecutor<15> commandExecutor;
 WiFiManager wifiManager;
+Sender sender;
 
 char commandBuffer[COMMAND_BUFFER_SIZE];
 int commandBufferIndex = 0;
+unsigned long lastUpdateTime;
 
 SensorReader sensors(PIN_DHT, PIN_SDA, PIN_SCL);
 
 void setup()
 {
     pinMode(LED_BUILTIN, OUTPUT);
-
 
     Serial.begin(9600);
     while (!Serial) { }
@@ -87,6 +93,28 @@ void setup()
         return OK;
     });
 
+    Command serverInfo("server-info", 2, [](int argc, char** argv) {
+        sender.SetIP(argv[0]);
+        sender.SetUUID(argv[1]);
+        Serial.println("Server info set");
+        return OK;
+    });
+
+    Command webSocketStart("send-begin", 0, [](int argc, char** argv) {
+        if(!wifiManager.IsConnected())
+            return ERR("No credentials set. Use wifi-set <SSID> <password> to set credentials.");
+        if(!sender.isReadyToBegin())
+            return ERR("No info about destination. Use server-info <IP> <UUID>");
+        sender.begin();
+        return OK;
+    });
+
+
+    Command test("test", 0, [](int argc, char** argv) {
+        Serial.println((std::to_string(sensors.IsDHTReady())).c_str());
+        Serial.println((std::to_string(sensors.IsSoilLightReady())).c_str());
+        return OK;
+    });
 
     commandExecutor.AddCommand(std::move(wifiSetCommand));
     commandExecutor.AddCommand(std::move(wifiConnectCommand));
@@ -97,6 +125,10 @@ void setup()
     commandExecutor.AddCommand(std::move(pollHumidityCommand));
     commandExecutor.AddCommand(std::move(pollSoilMoistureCommand));
     commandExecutor.AddCommand(std::move(pollLightLevelCommand));
+
+    commandExecutor.AddCommand(std::move(serverInfo));
+    commandExecutor.AddCommand(std::move(webSocketStart));
+    commandExecutor.AddCommand(std::move(test));
 }
 
 void HandleCommands()
@@ -132,10 +164,25 @@ void HandleCommands()
 
 void loop()
 {
+    sender.loop();
     HandleCommands();
 
     wifiManager.Update();
     sensors.Update();
+
+    if ((millis() - lastUpdateTime > UPDATEINTERVAL) && 
+        wifiManager.IsConnected() && 
+        sender.isReady() &&
+        sensors.IsAllReady())
+    {
+        auto temperature = std::to_string(sensors.GetTemperature());
+        auto humidity = std::to_string(sensors.GetHumidity());
+        auto soilMoisture = std::to_string(sensors.GetSoilMoisture());
+        auto lightLevel = std::to_string(sensors.GetLightLevel());
+
+        sender.sendMessage(temperature.c_str(), humidity.c_str(), soilMoisture.c_str(), lightLevel.c_str());
+        lastUpdateTime = millis();
+    }
 
     digitalWrite(LED_BUILTIN, millis() % 1000 < 500);
 }

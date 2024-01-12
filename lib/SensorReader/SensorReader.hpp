@@ -31,6 +31,7 @@ public:
 
     bool IsDHTReady() { return dht11Reader.IsReady(); }
     bool IsSoilLightReady() { return soilLightReader.IsReady(); }
+    bool IsAllReady() { return (dht11Reader.IsReady() && soilLightReader.IsReady());}
 
     float GetTemperature() { return dht11Reader.GetTemperature(); }                                 // From 0 to 60 (Celsius)
     float GetHumidity() { return dht11Reader.GetHumidity(); }                                       // From 0% to 100%
