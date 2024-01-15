@@ -110,11 +110,11 @@ void setup()
     });
 
 
-    Command test("test", 0, [](int argc, char** argv) {
+    /*Command test("test", 0, [](int argc, char** argv) {
         Serial.println((std::to_string(sensors.IsDHTReady())).c_str());
         Serial.println((std::to_string(sensors.IsSoilLightReady())).c_str());
         return OK;
-    });
+    });*/
 
     commandExecutor.AddCommand(std::move(wifiSetCommand));
     commandExecutor.AddCommand(std::move(wifiConnectCommand));
@@ -128,7 +128,7 @@ void setup()
 
     commandExecutor.AddCommand(std::move(serverInfo));
     commandExecutor.AddCommand(std::move(webSocketStart));
-    commandExecutor.AddCommand(std::move(test));
+    //commandExecutor.AddCommand(std::move(test));
 }
 
 void HandleCommands()
