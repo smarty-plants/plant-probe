@@ -8,6 +8,7 @@
 
 #include <SensorReader.hpp>
 #include <Sender.hpp>
+#include <MyHTTPClient.hpp>
 
 #define COMMAND_BUFFER_SIZE 128
 #define UPDATEINTERVAL 2000
@@ -16,10 +17,12 @@
 CommandExecutor<15> commandExecutor;
 WiFiManager wifiManager;
 Sender sender;
+MyHTTPClient http;
 
 char commandBuffer[COMMAND_BUFFER_SIZE];
 int commandBufferIndex = 0;
 unsigned long lastUpdateTime;
+bool autoSet = false;
 
 SensorReader sensors(PIN_DHT, PIN_SDA, PIN_SCL);
 
@@ -102,7 +105,7 @@ void setup()
 
     Command webSocketStart("send-begin", 0, [](int argc, char** argv) {
         if(!wifiManager.IsConnected())
-            return ERR("No credentials set. Use wifi-set <SSID> <password> to set credentials.");
+            return ERR("Wifi not connected");
         if(!sender.isReadyToBegin())
             return ERR("No info about destination. Use server-info <IP> <UUID>");
         sender.begin();
@@ -111,10 +114,20 @@ void setup()
 
 
     /*Command test("test", 0, [](int argc, char** argv) {
-        Serial.println((std::to_string(sensors.IsDHTReady())).c_str());
-        Serial.println((std::to_string(sensors.IsSoilLightReady())).c_str());
+        sender.SetIP("192.168.43.46");
+        http.setIP("192.168.43.46");
+        String uuid = http.requestForUUID();
+        if(!sender.isReadyToBegin())
+            return ERR("");
+        sender.begin();
+        autoSet = true;
         return OK;
     });*/
+
+    Command test("test", 0, [](int argc, char** argv) {
+        sender.ClearStoredUUID();
+        return OK;
+    });
 
     commandExecutor.AddCommand(std::move(wifiSetCommand));
     commandExecutor.AddCommand(std::move(wifiConnectCommand));
@@ -128,7 +141,7 @@ void setup()
 
     commandExecutor.AddCommand(std::move(serverInfo));
     commandExecutor.AddCommand(std::move(webSocketStart));
-    //commandExecutor.AddCommand(std::move(test));
+    commandExecutor.AddCommand(std::move(test));
 }
 
 void HandleCommands()
@@ -162,8 +175,36 @@ void HandleCommands()
     }
 }
 
+void StartAutoConnection()
+{
+    if(!autoSet && wifiManager.IsConnected())
+    {
+        Serial.println("Zaczynam wyszukiwanie serwera [To może potrać chwilę]");
+        String ip = http.requestForIP(wifiManager.GetLocalIP());
+        //String ip = "192.168.43.46";
+        if(!ip.equals(""))
+        {
+            Serial.println("Serwer znaleziony: " + ip);
+            sender.SetIP(ip);
+            http.setIP(ip);
+            if(!sender.HasStoredUUID())
+            {
+                String uuid = http.requestForUUID();
+                sender.SetUUID(uuid);
+                sender.StoreUUID(uuid);
+            }
+            if(!sender.isReadyToBegin())
+                return;
+            sender.begin();
+            autoSet = true;
+        }
+    }
+}
+
 void loop()
 {
+    StartAutoConnection();
+
     sender.loop();
     HandleCommands();
 

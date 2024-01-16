@@ -180,6 +180,11 @@ public:
         lastUpdateTime = millis();
         prevState = state;
     }
+
+    String GetLocalIP()
+    {
+        return WiFi.localIP().toString();
+    }
 };
 
 #endif
