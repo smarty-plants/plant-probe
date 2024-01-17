@@ -146,7 +146,8 @@ void setup()
     });*/
 
     Command test("test", 0, [](int argc, char** argv) {
-        sender.ClearStoredUUID();
+        preferences.ClearHTTPCredentials();
+        preferences.Save();
         return OK;
     });
 
@@ -164,6 +165,7 @@ void setup()
     commandExecutor.AddCommand(std::move(webSocketStart));
     commandExecutor.AddCommand(std::move(testEepromCommand));
     commandExecutor.AddCommand(std::move(httpClearCommand));
+    commandExecutor.AddCommand(std::move(test));
 }
 
 void HandleCommands()
@@ -206,25 +208,21 @@ void StartAutoConnection()
         {
             Serial.println("Looking for plant-server in this subnet. This could take a while.");
             auto ip = http.FindServer(wifiManager.GetLocalIP());
+            sender.SetIP(ip);
+
+            Serial.println("Looking for UUID for device.");
+            auto uuid = http.RequestUUID();
+            sender.SetUUID(uuid);
+
+            preferences.SaveUUID(uuid);
             preferences.SaveIP(ip);
         }
         else 
         {
             Serial.printf("Using stored IP: %s\n", preferences.GetHTTPCredentials().ip);
-        }
-        
-        sender.SetIP(preferences.GetHTTPCredentials().ip);
-
-        if (!sender.HasStoredUUID())
-        {
-            String uuid = http.RequestUUID();
-            sender.SetUUID(uuid);
-            preferences.SaveUUID(uuid);
-        }
-        else 
-        {
-            Serial.printf("Using stored UUID: %s\n", preferences.GetHTTPCredentials().uuid); 
-            sender.SetUUID(String(preferences.GetHTTPCredentials().uuid));   
+            Serial.printf("Using stored UUID: %s\n", preferences.GetHTTPCredentials().uuid);
+            sender.SetUUID(String(preferences.GetHTTPCredentials().uuid));
+            sender.SetIP(preferences.GetHTTPCredentials().ip); 
         }
         
         if (!sender.IsReadyToBegin())
