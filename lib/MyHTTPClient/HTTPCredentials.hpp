@@ -3,6 +3,7 @@
 
 struct HTTPCredentials
 {
+    char ip[32];
     char uuid[64];
 };
 

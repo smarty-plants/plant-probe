@@ -1,5 +1,5 @@
-#ifndef MYHTPPCLIENT_HPP
-#define MYHTPPCLIENT_HPP
+#ifndef MY_HTTP_CLIENT_HPP
+#define MY_HTTP_CLIENT_HPP
 
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
@@ -7,10 +7,16 @@
 #include <EEPROM.h>
 #include <WiFiClient.h>
 
+#include <Preferences.hpp>
+
+#define API_PORT "8000"
+#define API_URL(address, path) ("http://" + (address) + ":" + (API_PORT) + (path))
+
 class MyHTTPClient 
 {
 private:
-    String ip = "";
+    WiFiClient wifiClient;
+    HTTPClient httpClient;
 
 public:
     MyHTTPClient()
@@ -18,63 +24,70 @@ public:
 
     }
 
-    String requestForIP(String currIP)
+    void Begin(String address, String apiEndpoint) 
     {
-        WiFiClient wifiClient;
-        HTTPClient http;
+        httpClient.begin(wifiClient, API_URL(address, apiEndpoint));
+    }
+
+    void End() 
+    {
+        httpClient.end();
+    }
+
+    void ClearStoredCredentials() 
+    {
+        preferences.ClearHTTPCredentials();
+        preferences.Save();
+    }
+
+    String FindServer(String currIP)
+    {
         IPAddress ipAddress;
         ipAddress.fromString(currIP);
-        for(int i = 1; i < 255; i++)
+       
+        for (int i = 1; i < 255; i++)
         {
             String ip_ = String(ipAddress[0]) + "." + String(ipAddress[1]) + "." + String(ipAddress[2]) + "." + String(i);
-            http.begin(wifiClient , "http://" + ip_ + ":8000/api/");
-            int httpResponseCode = http.GET();
-            Serial.println(ip_);
-            Serial.print(".");
-            http.end();
-            if(httpResponseCode >= 200 && httpResponseCode < 300) 
+
+            Serial.printf("Trying %s...\n", ip_.c_str());
+
+            Begin(ip_, "/api/");
+            int httpResponseCode = httpClient.GET();
+            End();
+
+            if (httpResponseCode >= 200 && httpResponseCode < 300) 
             {
-                Serial.println(ip_);
+                Serial.printf("Found server at %s!\n", ip_.c_str());
                 return ip_;
             }
         }
         return "";
     }
 
-    String requestForUUID()
+    String RequestUUID()
     {
-        WiFiClient wifiClient;
-        HTTPClient http;
-        http.begin(wifiClient , "http://" + ip + ":8000/api/probe/create/");
-        int httpResponseCode = http.POST("");
+        auto credentials = preferences.GetHTTPCredentials();
+        Begin(credentials.ip, "/api/probe/create/");
+        int httpResponseCode = httpClient.POST("");
 
         if(httpResponseCode >= 200 && httpResponseCode < 300) 
         {
-            String response = http.getString();
+            String response = httpClient.getString();
             DynamicJsonDocument jsonResponse(1024);
             deserializeJson(jsonResponse, response);
 
             String probeId = jsonResponse["probe_id"];
-            http.end();
-            Serial.println("UUID POBRANE: " + probeId);
+            End();
+
+            Serial.println("Obtained UUID: " + probeId);
             return probeId;
         }
         else
         {
-            Serial.println("NIE UDAŁO SIĘ POBRAĆ UUID SONDY, WPROWADŹ UUID RĘCZNIE");
-            http.end();
+            Serial.printf("Couldn't obtain UUID. You need to enter it manually using server-info {ip} {uuid}\n(error code %d)\n", httpResponseCode);
+            End();
             return "";
         }
-    }
-
-    void setIP(String newIP)
-    {
-        ip = newIP;
-    }
-
-    String getIP()
-    {
-        return ip;
     }
 };
 

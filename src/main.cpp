@@ -11,10 +11,10 @@
 #include <MyHTTPClient.hpp>
 
 #define COMMAND_BUFFER_SIZE 128
-#define UPDATEINTERVAL 2000
+#define SENSOR_UPDATE_INTERVAL 2000
 
 
-CommandExecutor<15> commandExecutor;
+CommandExecutor<20> commandExecutor;
 WiFiManager wifiManager;
 Sender sender;
 MyHTTPClient http;
@@ -34,15 +34,18 @@ void setup()
     while (!Serial) { }
 
     Serial.println("Starting!");
+    preferences.Load();
 
     sensors.Begin();
 
-    if (!wifiManager.UseStoredCredentials())
+    if (!preferences.AreWiFiCredentialsSet())
         Serial.println("No stored WiFi credentials");
+
+    if (!preferences.AreHTTPCredentialsSet())
+        Serial.println("No stored HTTP credentials");
     
     Command wifiSetCommand("wifi-set", 2, [](int argc, char** argv) {
         wifiManager.SetCredentials(argv[0], argv[1]);
-        wifiManager.StoreCredentials();
         Serial.println("Credentials updated");
         return OK;
     });
@@ -60,6 +63,12 @@ void setup()
 
     Command wifiClearCommand("wifi-clear", 0, [](int argc, char** argv) {
         wifiManager.ClearStoredCredentials();
+        Serial.println("Cleared stored credentials");
+        return OK;
+    });
+
+    Command httpClearCommand("http-clear", 0, [](int argc, char** argv) {
+        http.ClearStoredCredentials();
         Serial.println("Cleared stored credentials");
         return OK;
     });
@@ -97,8 +106,12 @@ void setup()
     });
 
     Command serverInfo("server-info", 2, [](int argc, char** argv) {
-        sender.SetIP(argv[0]);
-        sender.SetUUID(argv[1]);
+        HTTPCredentials credentials;
+        strncpy(credentials.ip, argv[0], 32);
+        strncpy(credentials.uuid, argv[1], 64);
+        preferences.SaveHTTPCredentials(credentials);
+        preferences.Save();
+
         Serial.println("Server info set");
         return OK;
     });
@@ -106,9 +119,17 @@ void setup()
     Command webSocketStart("send-begin", 0, [](int argc, char** argv) {
         if(!wifiManager.IsConnected())
             return ERR("Wifi not connected");
-        if(!sender.isReadyToBegin())
+        if(!sender.IsReadyToBegin())
             return ERR("No info about destination. Use server-info <IP> <UUID>");
-        sender.begin();
+        sender.Begin();
+        return OK;
+    });
+
+    Command testEepromCommand("test-eeprom", 0, [](int argc, char** argv) {
+        EEPROM.begin(sizeof(Preferences) + 1);
+        for (unsigned int i = 0; i < sizeof(Preferences) + 1; i++)
+            Serial.printf("%02x", EEPROM.read(i));
+        EEPROM.end();
         return OK;
     });
 
@@ -141,7 +162,8 @@ void setup()
 
     commandExecutor.AddCommand(std::move(serverInfo));
     commandExecutor.AddCommand(std::move(webSocketStart));
-    commandExecutor.AddCommand(std::move(test));
+    commandExecutor.AddCommand(std::move(testEepromCommand));
+    commandExecutor.AddCommand(std::move(httpClearCommand));
 }
 
 void HandleCommands()
@@ -177,27 +199,38 @@ void HandleCommands()
 
 void StartAutoConnection()
 {
-    if(!autoSet && wifiManager.IsConnected())
+    if (!autoSet && wifiManager.IsConnected())
     {
-        Serial.println("Zaczynam wyszukiwanie serwera [To może potrać chwilę]");
-        String ip = http.requestForIP(wifiManager.GetLocalIP());
-        //String ip = "192.168.43.46";
-        if(!ip.equals(""))
+        // TODO: The logic in here is still a bit messy, needs refactoring
+        if (!preferences.AreHTTPCredentialsSet())
         {
-            Serial.println("Serwer znaleziony: " + ip);
-            sender.SetIP(ip);
-            http.setIP(ip);
-            if(!sender.HasStoredUUID())
-            {
-                String uuid = http.requestForUUID();
-                sender.SetUUID(uuid);
-                sender.StoreUUID(uuid);
-            }
-            if(!sender.isReadyToBegin())
-                return;
-            sender.begin();
-            autoSet = true;
+            Serial.println("Looking for plant-server in this subnet. This could take a while.");
+            auto ip = http.FindServer(wifiManager.GetLocalIP());
+            preferences.SaveIP(ip);
         }
+        else 
+        {
+            Serial.printf("Using stored IP: %s\n", preferences.GetHTTPCredentials().ip);
+        }
+        
+        sender.SetIP(preferences.GetHTTPCredentials().ip);
+
+        if (!sender.HasStoredUUID())
+        {
+            String uuid = http.RequestUUID();
+            sender.SetUUID(uuid);
+            preferences.SaveUUID(uuid);
+        }
+        else 
+        {
+            Serial.printf("Using stored UUID: %s\n", preferences.GetHTTPCredentials().uuid); 
+            sender.SetUUID(String(preferences.GetHTTPCredentials().uuid));   
+        }
+        
+        if (!sender.IsReadyToBegin())
+            return;
+        sender.Begin();
+        autoSet = true;
     }
 }
 
@@ -205,15 +238,15 @@ void loop()
 {
     StartAutoConnection();
 
-    sender.loop();
+    sender.Update();
     HandleCommands();
 
     wifiManager.Update();
     sensors.Update();
 
-    if ((millis() - lastUpdateTime > UPDATEINTERVAL) && 
+    if ((millis() - lastUpdateTime > SENSOR_UPDATE_INTERVAL) && 
         wifiManager.IsConnected() && 
-        sender.isReady() &&
+        sender.IsReady() &&
         sensors.IsAllReady())
     {
         auto temperature = std::to_string(sensors.GetTemperature());

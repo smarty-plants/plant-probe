@@ -6,7 +6,7 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
-#include <WiFiCredentials.hpp>
+#include <Preferences.hpp>
 #include <stdlib.h>
 
 enum WiFiManagerState {
@@ -19,9 +19,6 @@ enum WiFiManagerState {
 class WiFiManager
 {
 private:
-    WiFiCredentials credentials;
-    bool credentialsSet = false;
-
     wl_status_t wifiStatus;
 
     WiFiManagerState state = WiFiManagerState::Disconnected;
@@ -99,53 +96,32 @@ public:
         this->updateInterval = updateInterval;
     }
 
-    bool UseStoredCredentials()
-    {
-        EEPROM.begin(sizeof(WiFiCredentials) + 1);
-        if (EEPROM.read(0) != CREDENTIALS_STORED)
-        {
-            EEPROM.end(); 
-            return false;
-        }
-
-        EEPROM.get(1, credentials);
-        EEPROM.end();
-        credentialsSet = true;
-        return true;   
-    }
-
     void SetCredentials(const char* ssid, const char* password)
     {
-        credentials = WiFiCredentials();
+        WiFiCredentials credentials;
         strncpy(credentials.ssid, ssid, 32);
         strncpy(credentials.password, password, 32);
-        credentialsSet = true;
+        preferences.SaveWiFiCredentials(credentials);
+        preferences.Save();
     }
 
     void ClearStoredCredentials()
     {
-        EEPROM.begin(sizeof(WiFiCredentials) + 1);
-        EEPROM.write(0, 0x00);
-        EEPROM.put(1, WiFiCredentials());
-        EEPROM.end();
-    }
-
-    void StoreCredentials() 
-    {
-        EEPROM.begin(sizeof(WiFiCredentials) + 1);
-        EEPROM.write(0, CREDENTIALS_STORED);
-        EEPROM.put(1, credentials);
-        EEPROM.end();
+        preferences.ClearWiFiCredentials();
+        preferences.Save();
     }
 
     void PrintCredentials()
     {
+        auto credentials = preferences.GetWiFiCredentials();
         Serial.printf("SSID: %s\nPassword: %s\n", credentials.ssid, credentials.password);
     }
 
     bool Connect()
     {
-        if (!credentialsSet) return false;
+        if (!preferences.AreWiFiCredentialsSet()) return false;
+
+        auto credentials = preferences.GetWiFiCredentials();
 
         Serial.printf("Connecting to %s...\n", credentials.ssid);
 
@@ -159,6 +135,7 @@ public:
 
     void Disconnect()
     {
+        auto credentials = preferences.GetWiFiCredentials();
         Serial.printf("Disconnecting from %s...\n", credentials.ssid);
         WiFi.disconnect();
     }

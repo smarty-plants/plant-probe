@@ -1,8 +1,6 @@
 #ifndef SENDER_HPP
 #define SENDER_HPP
 
-#define CREDENTIALS_STORED 0x80
-
 #include <WebSockets.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
@@ -23,13 +21,13 @@ public:
         
     }
 
-    void begin()
+    void Begin()
     {
         isBegin = true;
         webSockets.begin(ip, 8000, "/ws/probe/" + uuid + "/");
     }
 
-    void loop()
+    void Update()
     {
         webSockets.loop();
     }
@@ -48,40 +46,20 @@ public:
         webSockets.sendTXT(message);
     }
 
-    void StoreUUID(String newUuid) 
-    {
-        HTTPCredentials credentials;
-        newUuid.toCharArray(credentials.uuid, sizeof(credentials.uuid));
-        EEPROM.begin(sizeof(HTTPCredentials) + 1);
-        EEPROM.write(sizeof(WiFiCredentials) + 1, CREDENTIALS_STORED);
-        EEPROM.put(sizeof(WiFiCredentials) + 2, credentials);
-        EEPROM.end();
-    }
+    // void StoreUUID(String newUuid) 
+    // {
+    //     HTTPCredentials credentials;
+    //     newUuid.toCharArray(credentials.uuid, sizeof(credentials.uuid));
+    //     preferences.SaveHTTPCredentials(credentials);
+    //     preferences.Save();
+    // }
 
-    bool HasStoredUUID()
-    {
-        EEPROM.begin(sizeof(HTTPCredentials) + 1);
-        if (EEPROM.read(sizeof(WiFiCredentials) + 1) != CREDENTIALS_STORED)
-        {
-            EEPROM.end();
-            return false;
-        }
-
-        HTTPCredentials credentials;
-        EEPROM.get(sizeof(WiFiCredentials) + 2, credentials);
-        EEPROM.end();
-        uuid = String(credentials.uuid);
-        Serial.println("Załadowano UUID z pamięci!");
-
-        return true;   
-    }
+    bool HasStoredUUID() { return preferences.AreHTTPCredentialsSet() && strcmp(preferences.GetHTTPCredentials().uuid, "") != 0; }
 
     void ClearStoredUUID()
     {
-        EEPROM.begin(sizeof(HTTPCredentials) + 1);
-        EEPROM.write(sizeof(WiFiCredentials) + 1, 0x00);
-        EEPROM.put(sizeof(WiFiCredentials) + 2, HTTPCredentials());
-        EEPROM.end();
+        preferences.ClearHTTPCredentials();
+        preferences.Save();
     }
 
     void SetIP(String newIP)
@@ -94,12 +72,12 @@ public:
         uuid = newUUID;
     }
 
-    bool isReady()
+    bool IsReady()
     {
         return !(ip.equals("") || uuid.equals("") || !isBegin);
     }
 
-    bool isReadyToBegin()
+    bool IsReadyToBegin()
     {
         return !(ip.equals("") || uuid.equals(""));
     }
