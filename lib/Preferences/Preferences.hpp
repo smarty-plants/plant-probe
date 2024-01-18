@@ -5,14 +5,17 @@
 #include <WiFiCredentials.hpp>
 #include <HTTPCredentials.hpp>
 
-#define WIFI_CREDENTIALS_SAVED 0b10000000
-#define SERVER_IP_SAVED 0b01000000
-#define PROBE_UUID_SAVED 0b00100000
+#define WIFI_CREDENTIALS_SAVED      0b10000000
+#define SERVER_IP_SAVED             0b01000000
+#define PROBE_UUID_SAVED            0b00100000
 
 struct Preferences 
 {
     WiFiCredentials wifiCredentials;
     HTTPCredentials httpCredentials;
+
+    bool autoConnectToWiFi;
+    bool autoConnectToServer;
 };
 
 class PreferencesManager
@@ -27,34 +30,39 @@ public:
     String GetServerIP() { return GetHTTPCredentials().ip; }
     String GetProbeUUID() { return GetHTTPCredentials().uuid; }
 
-    void SaveWiFiCredentials(WiFiCredentials credentials)
+    bool GetAutoConnectToWiFi() { return preferences.autoConnectToWiFi; }
+    bool GetAutoConnectToServer() { return preferences.autoConnectToServer; }
+
+    void SetAutoConnectToWiFi(bool value) { preferences.autoConnectToWiFi = value; }
+    void SetAutoConnectToServer(bool value) { preferences.autoConnectToServer = value; }
+
+    void SetWiFiCredentials(WiFiCredentials credentials)
     {
         preferences.wifiCredentials = credentials;
         saveFlags |= WIFI_CREDENTIALS_SAVED;
     }
 
-    void SaveServerIP(String ip)
+    void SetServerIP(String ip)
     {
         strncpy(preferences.httpCredentials.ip, ip.c_str(), 32);
         saveFlags |= SERVER_IP_SAVED;
     }
 
-    void SaveProbeUUID(String uuid)
+    void SetProbeUUID(String uuid)
     {
         strncpy(preferences.httpCredentials.uuid, uuid.c_str(), 64);
         saveFlags |= PROBE_UUID_SAVED;
     }
 
-    void SaveHTTPCredentials(HTTPCredentials credentials)
+    void SetHTTPCredentials(HTTPCredentials credentials)
     {
-        SaveHTTPCredentials(credentials.ip, credentials.uuid);
+        SetHTTPCredentials(credentials.ip, credentials.uuid);
     }
     
-    void SaveHTTPCredentials(String ip = "", String uuid = "") 
+    void SetHTTPCredentials(String ip = "", String uuid = "") 
     {
-        SaveServerIP(ip);
-        SaveProbeUUID(uuid);
-        Save();
+        SetServerIP(ip);
+        SetProbeUUID(uuid);
     }
 
     void ClearServerIP()

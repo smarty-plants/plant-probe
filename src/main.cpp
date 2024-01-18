@@ -91,14 +91,14 @@ void setup()
     });
 
     Command ipSetCommand("ip-set", 1, [](int argc, char** argv) {
-        preferences.SaveServerIP(String(argv[0]));
+        preferences.SetServerIP(String(argv[0]));
         preferences.Save();
         Serial.println("Server IP set");
         return OK;
     });
 
     Command uuidSetCommand("uuid-set", 1, [](int argc, char** argv) {
-        preferences.SaveProbeUUID(String(argv[0]));
+        preferences.SetProbeUUID(String(argv[0]));
         preferences.Save();
         Serial.println("Probe UUID set");
         return OK;
@@ -140,7 +140,7 @@ void setup()
         HTTPCredentials credentials;
         strncpy(credentials.ip, argv[0], 32);
         strncpy(credentials.uuid, argv[1], 64);
-        preferences.SaveHTTPCredentials(credentials);
+        preferences.SetHTTPCredentials(credentials);
         preferences.Save();
 
         Serial.println("Server info set");
@@ -161,6 +161,30 @@ void setup()
         for (unsigned int i = 0; i < sizeof(Preferences) + 1; i++)
             Serial.printf("%02x", EEPROM.read(i));
         EEPROM.end();
+        return OK;
+    });
+
+    Command wifiAutoConnectCommand("wifi-autoconnect", 1, [](int argc, char** argv) {
+        if (strcmp(argv[0], "on") == 0)
+            preferences.SetAutoConnectToWiFi(true);
+        else if (strcmp(argv[0], "off") == 0)
+            preferences.SetAutoConnectToWiFi(false);
+        else
+            return ERR("wifi-autoconnect takes 1 argument: on / off");
+        
+        preferences.Save();
+        return OK;
+    });
+
+    Command serverAutoConnectCommand("server-autoconnect", 1, [](int argc, char** argv) {
+        if (strcmp(argv[0], "on") == 0)
+            preferences.SetAutoConnectToServer(true);
+        else if (strcmp(argv[0], "off") == 0)
+            preferences.SetAutoConnectToServer(false);
+        else
+            return ERR("server-autoconnect takes 1 argument: on / off");
+        
+        preferences.Save();
         return OK;
     });
 
@@ -194,6 +218,9 @@ void setup()
     commandExecutor.AddCommand(std::move(uuidClearCommand));
     commandExecutor.AddCommand(std::move(ipSetCommand));
     commandExecutor.AddCommand(std::move(uuidSetCommand));
+
+    commandExecutor.AddCommand(std::move(wifiAutoConnectCommand));
+    commandExecutor.AddCommand(std::move(serverAutoConnectCommand));
 }
 
 void HandleCommands()
@@ -227,11 +254,10 @@ void HandleCommands()
     }
 }
 
-void StartAutoConnection()
+void ConnectToServer()
 {
     if (!autoSet && wifiManager.IsConnected())
     {
-        // TODO: The logic in here is still a bit messy, needs refactoring
         if (!preferences.IsServerIPSet())
         {
             Serial.println("Looking for plant-server in this subnet. This could take a while.");
@@ -245,7 +271,7 @@ void StartAutoConnection()
             else 
             {
                 sender.SetIP(ip);
-                preferences.SaveServerIP(ip);
+                preferences.SetServerIP(ip);
                 preferences.Save();    
             }                   
         }
@@ -269,7 +295,7 @@ void StartAutoConnection()
             {
                 sender.SetUUID(uuid);
 
-                preferences.SaveProbeUUID(uuid);
+                preferences.SetProbeUUID(uuid);
                 preferences.Save();
             }
         }
@@ -288,7 +314,11 @@ void StartAutoConnection()
 
 void loop()
 {
-    StartAutoConnection();
+    if (preferences.GetAutoConnectToWiFi() && wifiManager.IsDisconnected())
+        wifiManager.Connect();
+
+    if (preferences.GetAutoConnectToServer())
+        ConnectToServer();
 
     sender.Update();
     HandleCommands();

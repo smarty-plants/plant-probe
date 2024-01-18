@@ -101,7 +101,7 @@ public:
         WiFiCredentials credentials;
         strncpy(credentials.ssid, ssid, 32);
         strncpy(credentials.password, password, 32);
-        preferences.SaveWiFiCredentials(credentials);
+        preferences.SetWiFiCredentials(credentials);
         preferences.Save();
     }
 
@@ -143,6 +143,11 @@ public:
     bool IsConnected()
     {
         return state == WiFiManagerState::Connected;
+    }
+
+    bool IsDisconnected()
+    {
+        return state == WiFiManagerState::Disconnected;
     }
 
     void Update()
