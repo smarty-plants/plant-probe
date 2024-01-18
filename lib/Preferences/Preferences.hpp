@@ -1,11 +1,13 @@
 #ifndef PREFERENCES_HPP
 #define PREFERENCES_HPP
 
+#include <Arduino.h>
 #include <WiFiCredentials.hpp>
 #include <HTTPCredentials.hpp>
 
 #define WIFI_CREDENTIALS_SAVED 0b10000000
-#define HTTP_CREDENTIALS_SAVED 0b01000000
+#define SERVER_IP_SAVED 0b01000000
+#define PROBE_UUID_SAVED 0b00100000
 
 struct Preferences 
 {
@@ -22,6 +24,8 @@ private:
 public:
     WiFiCredentials GetWiFiCredentials() { return preferences.wifiCredentials; }
     HTTPCredentials GetHTTPCredentials() { return preferences.httpCredentials; }
+    String GetServerIP() { return GetHTTPCredentials().ip; }
+    String GetProbeUUID() { return GetHTTPCredentials().uuid; }
 
     void SaveWiFiCredentials(WiFiCredentials credentials)
     {
@@ -29,32 +33,38 @@ public:
         saveFlags |= WIFI_CREDENTIALS_SAVED;
     }
 
-    void SaveHTTPCredentials(HTTPCredentials credentials)
+    void SaveServerIP(String ip)
     {
-        preferences.httpCredentials = credentials;
-        saveFlags |= HTTP_CREDENTIALS_SAVED;
+        strncpy(preferences.httpCredentials.ip, ip.c_str(), 32);
+        saveFlags |= SERVER_IP_SAVED;
     }
 
+    void SaveProbeUUID(String uuid)
+    {
+        strncpy(preferences.httpCredentials.uuid, uuid.c_str(), 64);
+        saveFlags |= PROBE_UUID_SAVED;
+    }
+
+    void SaveHTTPCredentials(HTTPCredentials credentials)
+    {
+        SaveHTTPCredentials(credentials.ip, credentials.uuid);
+    }
     
     void SaveHTTPCredentials(String ip = "", String uuid = "") 
     {
-        HTTPCredentials credentials;
-        strncpy(credentials.ip, ip.c_str(), 32);
-        strncpy(credentials.uuid, uuid.c_str(), 64);
-        SaveHTTPCredentials(credentials);
+        SaveServerIP(ip);
+        SaveProbeUUID(uuid);
         Save();
     }
 
-    void SaveIP(String ip) 
-    { 
-        auto credentials = GetHTTPCredentials();
-        SaveHTTPCredentials(ip, String(credentials.uuid)); 
+    void ClearServerIP()
+    {
+        saveFlags &= ~SERVER_IP_SAVED;
     }
 
-    void SaveUUID(String uuid) 
-    { 
-        auto credentials = GetHTTPCredentials();
-        SaveHTTPCredentials(String(credentials.ip), uuid); 
+    void ClearProbeUUID()
+    {
+        saveFlags &= ~PROBE_UUID_SAVED;
     }
 
     void ClearWiFiCredentials() 
@@ -64,7 +74,8 @@ public:
 
     void ClearHTTPCredentials() 
     {
-        saveFlags &= ~HTTP_CREDENTIALS_SAVED;
+        ClearServerIP();
+        ClearProbeUUID();
     }
 
     Preferences Load() 
@@ -85,7 +96,8 @@ public:
     }
 
     bool AreWiFiCredentialsSet() { return (saveFlags & WIFI_CREDENTIALS_SAVED) != 0; }
-    bool AreHTTPCredentialsSet() { return (saveFlags & HTTP_CREDENTIALS_SAVED) != 0; }
+    bool IsServerIPSet() { return (saveFlags & SERVER_IP_SAVED) != 0; }
+    bool IsProbeUUIDSet() { return (saveFlags & PROBE_UUID_SAVED) != 0; }
 };
 
 static PreferencesManager preferences;

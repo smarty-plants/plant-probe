@@ -41,8 +41,11 @@ void setup()
     if (!preferences.AreWiFiCredentialsSet())
         Serial.println("No stored WiFi credentials");
 
-    if (!preferences.AreHTTPCredentialsSet())
-        Serial.println("No stored HTTP credentials");
+    if (!preferences.IsServerIPSet())
+        Serial.println("No stored server IP");
+
+    if (!preferences.IsProbeUUIDSet())
+        Serial.println("No stored probe UUID");
     
     Command wifiSetCommand("wifi-set", 2, [](int argc, char** argv) {
         wifiManager.SetCredentials(argv[0], argv[1]);
@@ -70,6 +73,34 @@ void setup()
     Command httpClearCommand("http-clear", 0, [](int argc, char** argv) {
         http.ClearStoredCredentials();
         Serial.println("Cleared stored credentials");
+        return OK;
+    });
+
+    Command ipClearCommand("ip-clear", 0, [](int argc, char** argv) {
+        preferences.ClearServerIP();
+        preferences.Save();
+        Serial.println("Server IP cleared");
+        return OK;
+    });
+
+    Command uuidClearCommand("uuid-clear", 0, [](int argc, char** argv) {
+        preferences.ClearProbeUUID();
+        preferences.Save();
+        Serial.println("Probe UUID cleared");
+        return OK;
+    });
+
+    Command ipSetCommand("ip-set", 1, [](int argc, char** argv) {
+        preferences.SaveServerIP(String(argv[0]));
+        preferences.Save();
+        Serial.println("Server IP set");
+        return OK;
+    });
+
+    Command uuidSetCommand("uuid-set", 1, [](int argc, char** argv) {
+        preferences.SaveProbeUUID(String(argv[0]));
+        preferences.Save();
+        Serial.println("Probe UUID set");
         return OK;
     });
 
@@ -133,7 +164,6 @@ void setup()
         return OK;
     });
 
-
     /*Command test("test", 0, [](int argc, char** argv) {
         sender.SetIP("192.168.43.46");
         http.setIP("192.168.43.46");
@@ -144,12 +174,6 @@ void setup()
         autoSet = true;
         return OK;
     });*/
-
-    Command test("test", 0, [](int argc, char** argv) {
-        preferences.ClearHTTPCredentials();
-        preferences.Save();
-        return OK;
-    });
 
     commandExecutor.AddCommand(std::move(wifiSetCommand));
     commandExecutor.AddCommand(std::move(wifiConnectCommand));
@@ -165,7 +189,11 @@ void setup()
     commandExecutor.AddCommand(std::move(webSocketStart));
     commandExecutor.AddCommand(std::move(testEepromCommand));
     commandExecutor.AddCommand(std::move(httpClearCommand));
-    commandExecutor.AddCommand(std::move(test));
+
+    commandExecutor.AddCommand(std::move(ipClearCommand));
+    commandExecutor.AddCommand(std::move(uuidClearCommand));
+    commandExecutor.AddCommand(std::move(ipSetCommand));
+    commandExecutor.AddCommand(std::move(uuidSetCommand));
 }
 
 void HandleCommands()
@@ -204,25 +232,51 @@ void StartAutoConnection()
     if (!autoSet && wifiManager.IsConnected())
     {
         // TODO: The logic in here is still a bit messy, needs refactoring
-        if (!preferences.AreHTTPCredentialsSet())
+        if (!preferences.IsServerIPSet())
         {
             Serial.println("Looking for plant-server in this subnet. This could take a while.");
-            auto ip = http.FindServer(wifiManager.GetLocalIP());
-            sender.SetIP(ip);
+            String ip;
+            bool success = http.FindServer(wifiManager.GetLocalIP(), ip);
 
-            Serial.println("Looking for UUID for device.");
-            auto uuid = http.RequestUUID();
-            sender.SetUUID(uuid);
-
-            preferences.SaveUUID(uuid);
-            preferences.SaveIP(ip);
+            if (!success)
+            {
+                Serial.println("Could not find plant-server in this subnet. Is the server running and connected to the network?");
+            }
+            else 
+            {
+                sender.SetIP(ip);
+                preferences.SaveServerIP(ip);
+                preferences.Save();    
+            }                   
         }
         else 
         {
-            Serial.printf("Using stored IP: %s\n", preferences.GetHTTPCredentials().ip);
-            Serial.printf("Using stored UUID: %s\n", preferences.GetHTTPCredentials().uuid);
-            sender.SetUUID(String(preferences.GetHTTPCredentials().uuid));
-            sender.SetIP(preferences.GetHTTPCredentials().ip); 
+            Serial.printf("Using stored IP: %s\n", preferences.GetServerIP().c_str());
+            sender.SetIP(preferences.GetServerIP()); 
+        }
+
+        if (!preferences.IsProbeUUIDSet())
+        {            
+            Serial.println("Requesting probe UUID from server...");
+            String uuid;
+            bool success = http.RequestUUID(uuid);
+
+            if (!success)
+            {
+                Serial.println("Could not request UUID. Is the server running and connected to the network?");
+            }
+            else 
+            {
+                sender.SetUUID(uuid);
+
+                preferences.SaveProbeUUID(uuid);
+                preferences.Save();
+            }
+        }
+        else 
+        {
+            Serial.printf("Using stored UUID: %s\n", preferences.GetProbeUUID().c_str());
+            sender.SetUUID(preferences.GetProbeUUID());
         }
         
         if (!sender.IsReadyToBegin())
@@ -252,7 +306,7 @@ void loop()
         auto soilMoisture = std::to_string(sensors.GetSoilMoisture());
         auto lightLevel = std::to_string(sensors.GetLightLevel());
 
-        sender.sendMessage(temperature.c_str(), humidity.c_str(), soilMoisture.c_str(), lightLevel.c_str());
+        sender.SendMessage(temperature.c_str(), humidity.c_str(), soilMoisture.c_str(), lightLevel.c_str());
         lastUpdateTime = millis();
     }
 

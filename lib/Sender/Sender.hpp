@@ -32,7 +32,7 @@ public:
         webSockets.loop();
     }
 
-    void sendMessage(String temperature, String humidity, String soilMoisture, String lightLevel)
+    void SendMessage(String temperature, String humidity, String soilMoisture, String lightLevel)
     {
         DynamicJsonDocument json(1024);
         json["temperature"] = temperature;
@@ -54,7 +54,7 @@ public:
     //     preferences.Save();
     // }
 
-    bool HasStoredUUID() { return preferences.AreHTTPCredentialsSet() && strcmp(preferences.GetHTTPCredentials().uuid, "") != 0; }
+    bool HasStoredUUID() { return preferences.IsProbeUUIDSet(); }
 
     void ClearStoredUUID()
     {

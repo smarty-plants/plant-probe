@@ -40,7 +40,7 @@ public:
         preferences.Save();
     }
 
-    String FindServer(String currIP)
+    bool FindServer(String currIP, String& ip)
     {
         IPAddress ipAddress;
         ipAddress.fromString(currIP);
@@ -58,19 +58,20 @@ public:
             if (httpResponseCode >= 200 && httpResponseCode < 300) 
             {
                 Serial.printf("Found server at %s!\n", ip_.c_str());
-                return ip_;
+                ip = ip_;
+                return true;
             }
         }
-        return "";
+        return false;
     }
 
-    String RequestUUID()
+    bool RequestUUID(String& uuid)
     {
         auto credentials = preferences.GetHTTPCredentials();
         Begin(credentials.ip, "/api/probe/create/");
         int httpResponseCode = httpClient.POST("");
 
-        if(httpResponseCode >= 200 && httpResponseCode < 300) 
+        if (httpResponseCode >= 200 && httpResponseCode < 300) 
         {
             String response = httpClient.getString();
             DynamicJsonDocument jsonResponse(1024);
@@ -80,13 +81,14 @@ public:
             End();
 
             Serial.println("Obtained UUID: " + probeId);
-            return probeId;
+            uuid = probeId;
+            return true;
         }
         else
         {
             Serial.printf("Couldn't obtain UUID. You need to enter it manually using server-info {ip} {uuid}\n(error code %d)\n", httpResponseCode);
             End();
-            return "";
+            return false;
         }
     }
 };
